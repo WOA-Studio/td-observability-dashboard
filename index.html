@@ -245,6 +245,16 @@
     }
     .card-footer-row { display: flex; justify-content: space-between; align-items: center; }
     .card-footer .val { color: var(--muted); }
+    .card-extra {
+      display: flex; flex-direction: column; gap: 3px;
+      font-size: calc(9px * var(--scale)); letter-spacing: 0.08em;
+      padding-top: 10px; border-top: 1px solid var(--border);
+      color: var(--faint);
+    }
+    .card-extra-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .card-extra-row .xkey { text-transform: uppercase; white-space: nowrap; }
+    .card-extra-row .xval { color: var(--muted); text-align: right; word-break: break-word; }
+    .card-extra-plain { color: var(--muted); line-height: 1.5; }
 
     @keyframes border-pulse      { 0%{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,230,118,.35)} 100%{border-color:var(--border);box-shadow:none} }
     @keyframes border-pulse-warn { 0%{border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,171,64,.3)}  100%{border-color:var(--border);box-shadow:none} }
@@ -555,6 +565,21 @@ document.getElementById('log-clear').addEventListener('click', e => {
 // ─────────────────────────────────────────────
 // RENDER CARD
 // ─────────────────────────────────────────────
+function renderExtra(raw) {
+  if (!raw) return '';
+  const parts = raw.split('|').map(s => s.trim()).filter(Boolean);
+  const rows = parts.map(p => {
+    const sep = p.indexOf(':');
+    if (sep > 0) {
+      const k = p.slice(0, sep).trim();
+      const v = p.slice(sep + 1).trim();
+      return `<div class="card-extra-row"><span class="xkey">${k}</span><span class="xval">${v}</span></div>`;
+    }
+    return `<div class="card-extra-plain">${p}</div>`;
+  }).join('');
+  return `<div class="card-extra">${rows}</div>`;
+}
+
 function cardHTML(docId, data) {
   const st      = nodeStatus(data);
   const fps     = data.fps ?? '—';
@@ -562,6 +587,7 @@ function cardHTML(docId, data) {
   const winCls  = win === 'OPEN' ? 'good' : 'bad';
   const version = data.version ? `<span class="card-version">${data.version}</span>` : '';
   const host    = data.host || '—';
+  const extra   = renderExtra(data.extra);
   return `
     <div class="card ${st}" data-doc="${docId}">
       <div class="card-top">
@@ -584,6 +610,7 @@ function cardHTML(docId, data) {
           <span class="metric-value sm ${winCls}">${win}</span>
         </div>
       </div>
+      ${extra}
       <div class="card-footer">
         <div class="card-footer-row">
           <span>LAST SEEN</span>
