@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>M2M — Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #080808;
+      --surface:    #0f0f0f;
+      --surface2:   #141414;
+      --border:     #1e1e1e;
+      --border2:    #2a2a2a;
+      --text:       #d4d4d4;
+      --muted:      #888;
+      --faint:      #444;
+      --label:      #3a3a3a;
+
+      --green:      #00e676;
+      --green-dim:  rgba(0,230,118,0.12);
+      --green-glow: rgba(0,230,118,0.06);
+      --amber:      #ffab40;
+      --amber-dim:  rgba(255,171,64,0.12);
+      --red:        #ff1744;
+      --red-dim:    rgba(255,23,68,0.12);
+
+      --mono: 'JetBrains Mono', monospace;
+      --display: 'Syne', sans-serif;
+
+      --scale: 1;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,8,8,0.94);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 0 28px; height: 52px; gap: 24px;
+    }
+
+    .logo {
+      font-family: var(--display);
+      font-size: calc(15px * var(--scale)); font-weight: 800;
+      letter-spacing: 0.08em; color: #fff; white-space: nowrap;
+    }
+    .logo em { color: var(--green); font-style: normal; }
+
+    .topbar-stats {
+      display: flex; align-items: center;
+      flex: 1; justify-content: center; flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 16px; border-left: 1px solid var(--border);
+      font-size: calc(10px * var(--scale)); letter-spacing: 0.12em; color: var(--muted);
+    }
+    .stat-pill:first-child { border-left: none; }
+    .stat-pill strong { color: var(--text); font-weight: 600; }
+    .stat-pill.ok   strong { color: var(--green); }
+    .stat-pill.warn strong { color: var(--amber); }
+    .stat-pill.bad  strong { color: var(--red); }
+
+    .live-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 9px; letter-spacing: 0.2em;
+      color: var(--green); font-weight: 600;
+    }
+    .live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.8s ease-in-out infinite;
+    }
+    .live-dot.dead { background: var(--red); animation: none; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 28px; border-bottom: 1px solid var(--border);
+      background: var(--bg); flex-wrap: wrap;
+    }
+    .toolbar-label {
+      font-size: 9px; letter-spacing: 0.25em;
+      color: var(--faint); text-transform: uppercase; margin-right: 4px;
+    }
+    .filter-btn {
+      background: none; border: 1px solid var(--border2);
+      color: var(--muted); font-family: var(--mono);
+      font-size: 9px; letter-spacing: 0.15em;
+      text-transform: uppercase; padding: 4px 12px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn:hover,
+    .filter-btn.active { border-color: var(--green); color: var(--green); background: var(--green-glow); }
+    .spacer { flex: 1; }
+    .ctrl-btn {
+      background: none; border: 1px solid var(--border2);
+      color: var(--muted); font-family: var(--mono);
+      font-size: 9px; letter-spacing: 0.12em;
+      padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+    }
+    .size-btn.active { border-color: var(--green); color: var(--green); background: var(--green-glow); }
+
+    /* ── MAIN ── */
+    main {
+      flex: 1; padding: 16px 28px 40px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .state-msg {
+      text-align: center; padding: 80px;
+      font-size: 11px; color: var(--faint); letter-spacing: 0.2em;
+    }
+
+    /* ── GROUP BLOCK ── */
+    .group-block {
+      border: 1px solid var(--border);
+      overflow: hidden; transition: border-color 0.2s;
+    }
+    .group-block:hover { border-color: var(--border2); }
+
+    .group-header {
+      display: grid;
+      grid-template-columns: 3px 1fr auto auto auto auto 36px;
+      align-items: stretch;
+      height: 52px;
+      cursor: pointer;
+      background: var(--surface);
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .group-header:hover { background: var(--surface2); }
+
+    .group-accent {
+      transition: background 0.3s; flex-shrink: 0;
+    }
+    .group-accent.ok   { background: var(--green); }
+    .group-accent.warn { background: var(--amber); }
+    .group-accent.down { background: var(--red); }
+
+    .group-name {
+      font-family: var(--display);
+      font-size: calc(13px * var(--scale)); font-weight: 700;
+      letter-spacing: 0.06em; color: #eee;
+      text-transform: uppercase;
+      display: flex; align-items: center;
+      padding: 0 20px 0 16px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .group-meta-item {
+      display: flex; flex-direction: column;
+      align-items: flex-end; justify-content: center;
+      padding: 0 20px; gap: 4px;
+      border-left: 1px solid var(--border);
+      min-width: 100px;
+    }
+    .gm-label {
+      font-size: calc(9px * var(--scale)); letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--faint);
+    }
+    .gm-value {
+      font-size: calc(13px * var(--scale)); font-weight: 600; color: var(--text); line-height: 1;
+    }
+    .gm-value.ok   { color: var(--green); }
+    .gm-value.warn { color: var(--amber); }
+    .gm-value.bad  { color: var(--red); }
+    .gm-value.sm   { font-size: calc(10px * var(--scale)); }
+
+    /* semafori dots (shown when collapsed, hidden when open) */
+    .tp-dots {
+      display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+      max-width: 120px; justify-content: flex-end;
+    }
+    .tp-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .tp-dot.online  { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .tp-dot.offline { background: var(--red); }
+    .tp-dot.warning { background: var(--amber); }
+
+    /* toggle counter vs dots based on open state */
+    .group-block     .tp-counter { display: none; }
+    .group-block.open .tp-counter { display: block; }
+    .group-block     .tp-dots    { display: flex; }
+    .group-block.open .tp-dots   { display: none; }
+
+    .group-status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: calc(9px * var(--scale)); letter-spacing: 0.15em; font-weight: 600;
+      text-transform: uppercase; padding: 4px 10px;
+      border: 1px solid currentColor;
+    }
+    .group-status-badge.ok   { color: var(--green); border-color: rgba(0,230,118,.25); background: rgba(0,230,118,.05); }
+    .group-status-badge.warn { color: var(--amber); border-color: rgba(255,171,64,.25); background: rgba(255,171,64,.05); }
+    .group-status-badge.down { color: var(--red);   border-color: rgba(255,23,68,.25);  background: rgba(255,23,68,.05); }
+
+    .chevron {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--faint); font-size: 11px;
+      border-left: 1px solid var(--border);
+      transition: transform 0.25s;
+    }
+    .group-block.open .chevron { transform: rotate(180deg); }
+
+    /* ── GROUP BODY ── */
+    .group-body {
+      display: none;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 10px;
+    }
+    .group-block.open .group-body { display: block; }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 8px;
+    }
+
+    /* ── NODE CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 18px 20px;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s;
+    }
+    .card::after {
+      content: ''; position: absolute;
+      bottom: 0; left: 0; height: 2px; width: 100%;
+      background: var(--border2); transition: background 0.3s;
+    }
+    .card.online::after  { background: var(--green); }
+    .card.offline::after { background: var(--red); }
+    .card.warning::after { background: var(--amber); }
+
+    .card-top {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; margin-bottom: 14px; gap: 10px;
+    }
+    .card-id-label {
+      font-size: calc(9px * var(--scale)); letter-spacing: 0.18em;
+      color: var(--faint); text-transform: uppercase; margin-bottom: 4px;
+    }
+    .card-name {
+      font-family: var(--display);
+      font-size: calc(14px * var(--scale)); font-weight: 700;
+      color: #eee; letter-spacing: 0.02em; line-height: 1.2;
+    }
+
+    .node-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: calc(8px * var(--scale)); font-weight: 600; letter-spacing: 0.12em;
+      padding: 3px 8px; border: 1px solid currentColor; white-space: nowrap; flex-shrink: 0;
+    }
+    .node-badge.online  { color: var(--green); border-color: rgba(0,230,118,.25);  background: rgba(0,230,118,.06); }
+    .node-badge.offline { color: var(--red);   border-color: rgba(255,23,68,.25);  background: rgba(255,23,68,.06); }
+    .node-badge.warning { color: var(--amber); border-color: rgba(255,171,64,.25); background: rgba(255,171,64,.06); }
+    .node-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+
+    .card-metrics {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-bottom: 14px;
+    }
+    .metric { display: flex; flex-direction: column; gap: 4px; }
+    .metric-label {
+      font-size: calc(9px * var(--scale)); letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--faint);
+    }
+    .metric-value { font-size: calc(22px * var(--scale)); font-weight: 700; line-height: 1; color: var(--text); }
+    .metric-value.good { color: var(--green); }
+    .metric-value.warn { color: var(--amber); }
+    .metric-value.bad  { color: var(--red); }
+    .metric-value.sm   { font-size: calc(12px * var(--scale)); padding-top: 6px; font-weight: 500; letter-spacing: 0.04em; }
+
+    .card-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: calc(9px * var(--scale)); color: var(--faint); letter-spacing: 0.1em;
+      padding-top: 12px; border-top: 1px solid var(--border);
+    }
+    .card-footer .ls-val { color: var(--muted); }
+
+    /* pulse on outline when data arrives */
+    @keyframes border-pulse {
+      0%   { border-color: var(--green); box-shadow: 0 0 0 2px rgba(0,230,118,.35); }
+      100% { border-color: var(--border); box-shadow: none; }
+    }
+    @keyframes border-pulse-warn {
+      0%   { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(255,171,64,.3); }
+      100% { border-color: var(--border); box-shadow: none; }
+    }
+    @keyframes border-pulse-off {
+      0%   { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255,23,68,.3); }
+      100% { border-color: var(--border); box-shadow: none; }
+    }
+    .card.pulse-online  { animation: border-pulse 0.9s ease-out forwards; }
+    .card.pulse-warning { animation: border-pulse-warn 0.9s ease-out forwards; }
+    .card.pulse-offline { animation: border-pulse-off 0.9s ease-out forwards; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 10px 28px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between;
+      font-size: 8px; color: var(--faint); letter-spacing: 0.12em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">M2M <em>//</em> MONITOR</div>
+  <div class="topbar-stats" id="topbar-stats"></div>
+  <div class="live-badge">
+    <div class="live-dot" id="live-dot"></div>
+    <span id="live-label">CONNECTING</span>
+  </div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Filter</span>
+  <button class="filter-btn active" data-filter="all">ALL</button>
+  <button class="filter-btn" data-filter="online">ONLINE</button>
+  <button class="filter-btn" data-filter="warning">WARNING</button>
+  <button class="filter-btn" data-filter="offline">OFFLINE</button>
+  <div class="spacer"></div>
+  <button class="ctrl-btn" id="expand-all">EXPAND ALL</button>
+  <button class="ctrl-btn" id="collapse-all">COLLAPSE ALL</button>
+  <div style="width:1px;height:20px;background:var(--border2);margin:0 4px"></div>
+  <span class="toolbar-label">Size</span>
+  <button class="ctrl-btn size-btn active" data-scale="1">S</button>
+  <button class="ctrl-btn size-btn" data-scale="1.2">M</button>
+  <button class="ctrl-btn size-btn" data-scale="1.45">L</button>
+</div>
+
+<main id="main">
+  <div class="state-msg" id="loading-msg">CONNECTING TO FIRESTORE…</div>
+</main>
+
+<footer>
+  <span>WOA STUDIO · M2M INSTALLATION MONITOR</span>
+  <span id="last-update">—</span>
+</footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+<script>
+// ─────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyB5atzN8og3a8M0WiESm-z5o9ov7XGZ_vo",
+  authDomain:        "m2m-64c8e.firebaseapp.com",
+  projectId:         "m2m-64c8e",
+  storageBucket:     "m2m-64c8e.firebasestorage.app",
+  messagingSenderId: "1070945415278",
+  appId:             "1:1070945415278:web:c6cfdaca73ae2ddf6e367f"
+};
+const OFFLINE_THRESHOLD_MIN = 2;
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const nodeData = {};
+let currentFilter = 'all';
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const fmtTime = d =>
+  d.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+function fmtAgo(ts) {
+  if (!ts) return 'never';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 0)    return 'just now';
+  if (s < 60)   return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s ago`;
+  return fmtTime(d);
+}
+
+function nodeStatus(data) {
+  const on = data.status === true || data.status === 'true' || data.status === 'True';
+  const ls = data.lastSeen?.toDate ? data.lastSeen.toDate() : null;
+  if (!ls) return 'offline';
+  if ((Date.now() - ls.getTime()) / 60000 > OFFLINE_THRESHOLD_MIN) return 'offline';
+  return on ? 'online' : 'warning';
+}
+
+const fpsClass = fps => {
+  const f = parseInt(fps);
+  return isNaN(f)||f===0 ? 'bad' : f<30 ? 'warn' : 'good';
+};
+
+function groupStatus(nodes) {
+  const statuses = nodes.map(nodeStatus);
+  if (statuses.every(s => s === 'online'))  return 'ok';
+  if (statuses.some(s  => s === 'offline')) return 'down';
+  return 'warn';
+}
+
+function avgFps(nodes) {
+  const vals = nodes.map(n => parseInt(n.fps)).filter(f => !isNaN(f) && f > 0);
+  if (!vals.length) return '—';
+  return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+}
+
+function groupLastSeen(nodes) {
+  const dates = nodes.map(n => n.lastSeen?.toDate ? n.lastSeen.toDate() : null).filter(Boolean);
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map(d=>d.getTime())));
+}
+
+function getGroups() {
+  const g = {};
+  Object.entries(nodeData).forEach(([docId, data]) => {
+    const key = data.group || '(no group)';
+    if (!g[key]) g[key] = [];
+    g[key].push({ docId, data });
+  });
+  return g;
+}
+
+// ─────────────────────────────────────────────
+// RENDER CARD
+// ─────────────────────────────────────────────
+function cardHTML(docId, data) {
+  const st     = nodeStatus(data);
+  const fps    = data.fps ?? '—';
+  const win    = (data.winopen==='True'||data.winopen===true) ? 'OPEN' : 'CLOSED';
+  const winCls = win==='OPEN' ? 'good' : 'bad';
+  return `
+    <div class="card ${st}" data-doc="${docId}">
+      <div class="card-top">
+        <div>
+          <div class="card-id-label">Touchpoint</div>
+          <div class="card-name">${(data.id||docId).replace(/_/g,' ')}</div>
+        </div>
+        <span class="node-badge ${st}">${st.toUpperCase()}</span>
+      </div>
+      <div class="card-metrics">
+        <div class="metric">
+          <span class="metric-label">FPS</span>
+          <span class="metric-value ${fpsClass(fps)}">${fps}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Window</span>
+          <span class="metric-value sm ${winCls}">${win}</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>LAST SEEN</span>
+        <span class="ls-val ls-label" data-doc="${docId}">${fmtAgo(data.lastSeen)}</span>
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+// RENDER ALL
+// ─────────────────────────────────────────────
+function renderAll() {
+  const groups = getGroups();
+  const main   = document.getElementById('main');
+
+  // save open state
+  const prevOpen = {};
+  document.querySelectorAll('.group-block').forEach(el => {
+    prevOpen[el.dataset.group] = el.classList.contains('open');
+  });
+
+  main.innerHTML = '';
+  const names = Object.keys(groups).sort();
+
+  if (!names.length) {
+    main.innerHTML = '<div class="state-msg">NO DATA</div>';
+    return;
+  }
+
+  names.forEach(gName => {
+    const entries = groups[gName];
+    const nodes   = entries.map(e => e.data);
+    const visible = entries.filter(e => currentFilter==='all' || nodeStatus(e.data)===currentFilter);
+    if (currentFilter !== 'all' && !visible.length) return;
+
+    const gst    = groupStatus(nodes);
+    const online = nodes.filter(n => nodeStatus(n)==='online').length;
+    const total  = nodes.length;
+    const fps    = avgFps(nodes);
+    const ls     = groupLastSeen(nodes);
+    const lsStr  = ls ? fmtAgo({toDate:()=>ls}) : '—';
+    const label  = gst==='ok' ? 'ALL OK' : gst==='warn' ? 'DEGRADED' : 'DOWN';
+    const nodeCls= online===total ? 'ok' : online===0 ? 'bad' : 'warn';
+    const isOpen = prevOpen[gName] !== undefined ? prevOpen[gName] : true;
+
+    const block = document.createElement('div');
+    block.className = `group-block ${isOpen?'open':''}`;
+    block.dataset.group = gName;
+
+    block.innerHTML = `
+      <div class="group-header">
+        <div class="group-accent ${gst}"></div>
+        <div class="group-name">${gName}</div>
+        <div class="group-meta-item">
+          <span class="gm-label">Touchpoints</span>
+          <span class="gm-value tp-counter ${nodeCls}">${online}/${total}</span>
+          <span class="tp-dots">${nodes.map(n => `<span class="tp-dot ${nodeStatus(n)}" title="${(n.id||'').replace(/_/g,' ')}"></span>`).join('')}</span>
+        </div>
+        <div class="group-meta-item">
+          <span class="gm-label">Avg FPS</span>
+          <span class="gm-value">${fps}</span>
+        </div>
+        <div class="group-meta-item">
+          <span class="gm-label">Last Update</span>
+          <span class="gm-value sm grp-ls" data-group="${gName}">${lsStr}</span>
+        </div>
+        <div class="group-meta-item">
+          <span class="gm-label">Status</span>
+          <span class="group-status-badge ${gst}">${label}</span>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="group-body">
+        <div class="cards-grid">
+          ${(visible.length ? visible : entries).map(e => cardHTML(e.docId, e.data)).join('')}
+        </div>
+      </div>`;
+
+    block.querySelector('.group-header').addEventListener('click', () => {
+      block.classList.toggle('open');
+    });
+
+    main.appendChild(block);
+  });
+}
+
+// ─────────────────────────────────────────────
+// REFRESH LABELS (client-side tick)
+// ─────────────────────────────────────────────
+function refreshLabels() {
+  document.querySelectorAll('.ls-label[data-doc]').forEach(el => {
+    const d = nodeData[el.dataset.doc];
+    if (d?.lastSeen) el.textContent = fmtAgo(d.lastSeen);
+  });
+  // group last-seen
+  const groups = getGroups();
+  document.querySelectorAll('.grp-ls[data-group]').forEach(el => {
+    const entries = groups[el.dataset.group];
+    if (!entries) return;
+    const ls = groupLastSeen(entries.map(e=>e.data));
+    if (ls) el.textContent = fmtAgo({toDate:()=>ls});
+  });
+}
+
+setInterval(refreshLabels, 5000);
+
+// ─────────────────────────────────────────────
+// TOPBAR
+// ─────────────────────────────────────────────
+function updateTopbar() {
+  const all    = Object.values(nodeData);
+  const online = all.filter(d=>nodeStatus(d)==='online').length;
+  const warn   = all.filter(d=>nodeStatus(d)==='warning').length;
+  const off    = all.filter(d=>nodeStatus(d)==='offline').length;
+  const grps   = new Set(all.map(d=>d.group||'(no group)')).size;
+  const fps    = avgFps(all);
+  document.getElementById('topbar-stats').innerHTML = `
+    <div class="stat-pill ok"><strong>${online}</strong>&nbsp;ONLINE</div>
+    <div class="stat-pill warn"><strong>${warn}</strong>&nbsp;WARN</div>
+    <div class="stat-pill bad"><strong>${off}</strong>&nbsp;OFFLINE</div>
+    <div class="stat-pill"><strong>${grps}</strong>&nbsp;GROUPS</div>
+    <div class="stat-pill"><strong>${online+warn+off}</strong>&nbsp;TOUCHPOINTS</div>
+    <div class="stat-pill"><strong>${fps}</strong>&nbsp;AVG FPS</div>`;
+}
+
+// ─────────────────────────────────────────────
+// CONTROLS
+// ─────────────────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.filter;
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderAll();
+  });
+});
+document.querySelectorAll('.size-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.documentElement.style.setProperty('--scale', btn.dataset.scale);
+  });
+});
+
+document.getElementById('expand-all').addEventListener('click', () => {
+  document.querySelectorAll('.group-block').forEach(b=>b.classList.add('open'));
+});
+document.getElementById('collapse-all').addEventListener('click', () => {
+  document.querySelectorAll('.group-block').forEach(b=>b.classList.remove('open'));
+});
+
+// ─────────────────────────────────────────────
+// FIRESTORE LISTENER
+// ─────────────────────────────────────────────
+db.collection('installations').onSnapshot(snapshot => {
+  document.getElementById('loading-msg')?.remove();
+  document.getElementById('live-dot').className    = 'live-dot';
+  document.getElementById('live-label').textContent = 'LIVE';
+
+  const modifiedDocs = [];
+  snapshot.docChanges().forEach(change => {
+    if (change.type === 'removed') delete nodeData[change.doc.id];
+    else {
+      nodeData[change.doc.id] = change.doc.data();
+      if (change.type === 'modified') modifiedDocs.push(change.doc.id);
+    }
+  });
+
+  renderAll();
+  updateTopbar();
+  document.getElementById('last-update').textContent = 'LAST UPDATE · ' + fmtTime(new Date());
+
+  // pulse outline on updated cards (after DOM refresh)
+  requestAnimationFrame(() => {
+    modifiedDocs.forEach(docId => {
+      const el = document.querySelector(`.card[data-doc="${docId}"]`);
+      if (!el) return;
+      const st = el.classList.contains('online') ? 'online'
+               : el.classList.contains('offline') ? 'offline' : 'warning';
+      el.classList.remove('pulse-online', 'pulse-warning', 'pulse-offline');
+      void el.offsetWidth; // reflow to restart animation
+      el.classList.add(`pulse-${st}`);
+    });
+  });
+
+}, err => {
+  document.getElementById('live-dot').className    = 'live-dot dead';
+  document.getElementById('live-label').textContent = 'ERROR';
+  document.getElementById('main').innerHTML =
+    `<div class="state-msg">FIRESTORE ERROR — ${err.message}</div>`;
+  console.error(err);
+});
+</script>
+</body>
+</html>
