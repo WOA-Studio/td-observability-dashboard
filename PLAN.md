@@ -45,7 +45,7 @@ Obiettivo: portare l'MVP online, protetto, robusto, su tutte le 15 installazioni
     match /databases/{database}/documents {
       match /installations/{docId} {
         allow read: if request.auth != null
-                    && request.auth.token.email.endsWith('@woacreativecompany.com');
+                    && request.auth.token.email.matches('.*@woacreativecompany\\.com');
         allow write: if false;  // solo service account scrive
       }
     }
@@ -81,17 +81,34 @@ Mantengo il design attuale (è già buono). Modifiche:
 - [ ] **Web Notifications API**: al primo load chiedo permesso; quando una card passa a offline mentre il tab è in background, notifica desktop nativa.
 - [ ] La regola `nodeStatus()` (online/warning/offline da `status` + `lastSeen`) viene estratta in una funzione singola, riusata identica per il rendering e per la detection delle transizioni del log.
 
-### Step 0.4 — TOX TouchDesigner (via MCP)
+### Step 0.4 — TOX TouchDesigner (via MCP) ✅
 
-Da fare quando attivi l'MCP server. Review del TOX esistente prima, poi:
+Componente costruito e salvato come [`firestore_monitor.tox`](firestore_monitor.tox) (2.3 KB) nella root della repo.
 
-- [ ] Le write su Firestore passano da **service account** (Admin SDK), non più dal client-side apiKey. Credenziali in un DAT del TOX, fuori dal version control delle patch.
-- [ ] Aggiunta dei campi `version` e `host` al payload scritto.
-- [ ] **Normalizzazione tipi** prima della write: `fps` come number, `status` e `winopen` come boolean (non più stringhe "True"/"False"). Toglie un layer di fragilità che oggi gestiamo client-side.
-- [ ] **Cadenza scrittura: 60 secondi** (le installazioni sono accese ~14h/day, non 24/7 → 12.600 write/day, dentro Spark con margine). Soglia offline lato client: 3 minuti.
-- [ ] **Heartbeat separato dal render loop**: timer Python indipendente dentro TD. Se la GPU si inchioda l'heartbeat continua, e davvero se l'heartbeat si ferma è perché TD è morto.
-- [ ] **Retry con backoff** se la write fallisce (max 3 tentativi).
-- [ ] **Config esternalizzato**: `id`, `group`, `version` letti da un DAT separato. Onboardare una nuova installazione = copiare il TOX standard + cambiare 3 righe di config, niente patch custom per ogni macchina.
+**Architettura interna**:
+- `heartbeat_script` (textDAT, modulo Python) — singola `send_heartbeat()`: Firebase Anonymous sign-in via REST API → PATCH a `installations/{Touchpoint ID}` con `id`, `group`, `fps`, `status`, `winopen`, `lastSeen`, `version`, `host`. Token cache (1h) con refresh automatico.
+- `init_exec` (executeDAT con `frameend`) — scheduler wall-clock: ad ogni frame controlla `time.time() - _last_fire >= Interval`, e se sì chiama `send_heartbeat()`. Reset di `_last_fire` quando `Active` passa a False. Risponde a `onStart` / `onCreate` per il caso drag-drop del TOX.
+
+**Custom parameters sul componente** (visibili da pannello, niente bisogno di entrare nel TOX):
+- Tab **Config**: `Touchpoint ID`, `Group / Room`, `Patch Version`, `Hostname` (auto-rilevato).
+- Tab **Firestore**: `Active` (toggle), `Interval` (sec, default 60, min 10).
+- Tab **Status** (read-only, aggiornato in tempo reale): `Last Heartbeat`, `Last Error`.
+
+**Auth**: Firebase Anonymous sign-in dalla REST API (`identitytoolkit.googleapis.com/v1/accounts:signUp`). Nessuna credenziale in chiaro nel TOX, solo l'apiKey pubblica. Le security rules Firestore richiedono `request.auth != null` per la write.
+
+**FPS**: letto da `project.cookRate` (target FPS del progetto, pari all'effettivo finché TD non droppa frame).
+
+**Window status**: `op('/perform').isOpen`.
+
+**Onboarding di una nuova installazione**: 
+1. Drag-drop `firestore_monitor.tox` nel network del progetto TD.
+2. Imposta `Touchpoint ID` e `Group / Room` nel tab Config.
+3. `Active` è già True → al primo `onCreate` parte il primo heartbeat, poi ogni 60s.
+
+**Cosa NON è stato fatto in questa fase** (rimandato a fase 2 se necessario):
+- Retry con backoff sulla write (oggi se fallisce si vede in `Last Error` e si riprova al prossimo intervallo)
+- Buffer offline in caso di rete instabile
+- Service account write (oggi si usa Anonymous Auth — pragmatico e abbastanza per uso interno)
 
 ### Step 0.5 — Test & rollout
 
